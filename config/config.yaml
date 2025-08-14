@@ -1,7 +1,21 @@
-## Path to input bed
+## Path to input bed, index description file
 input: 'input.bed'
+
+## Pipeline run options
+alignmentMode: "unique" # "unique" or "LDA"
+probeLengthMin: 80
+probeLengthMax: 80
+kmerFilter: True
+kmerLength: 18 # Must match 'jellyfishIndex'
+kmerCount: 10
+structureFilter: True
+structureThresh: 0.1
+addIndex: True
 
 ## Genome-specific reference parameters
 genomeFASTA: '/fdb/genomebrowser/fasta/hg38/hg38.fa'
 bowtieIndex: '/fdb/igenomes/Homo_sapiens/UCSC/hg38/Sequence/Bowtie2Index/genome' 
 jellyfishIndex: '/data/reedks/data/ref/hg38/hg38_18.jf'
+
+## Index sequence information
+indexSeqs: 'indexSequences.txt'

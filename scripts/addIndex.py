@@ -22,10 +22,19 @@ import sys
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--input", 
                     required = True,
-                    help="Tab-separated config file with 'name', 'suffix', 'uniF', 'uniR', and 'barcodes' columns")
+                    help="Probe bed file including sequence info")
+parser.add_argument("--uniF", 
+                    required = True,
+                    help="Universal forward primer ID")
+parser.add_argument("--uniR", 
+                    required = True,
+                    help="Universal forward primer ID")
+parser.add_argument("--barcodes", 
+                    required = True,
+                    help="Comma-separated list of barcode IDs")
 parser.add_argument("--indexInfo",
-                    default="indexInfo.txt",
-                    help="Tab-separated index info file with 'name' and 'seq' columns")
+                    required = True,
+                    help="Tab-separated index sequence info file with 'name' and 'seq' columns")
 args = parser.parse_args()
 
 # Function for reverse complementation of reverse primers
@@ -48,26 +57,25 @@ with open(args.indexInfo, 'r') as indexFile:
     for index in indexInfo:
         indexDict[index['name']] = index['seq']
 
-# Open config file
-with open(args.input, 'r') as inputFile:
-    # Read in as dictionary
-    input = csv.DictReader(inputFile, delimiter='\t')
-    for sample in input:
-        # Find probe BED file input name, build BED file output name
-        inFile = "output/" + sample['name'] + sample['suffix']
-        newFile = "output/" + sample['name'] + '_indexed' + sample['suffix']
-        # Begin writing an output file
-        with open(newFile, 'w') as outFile:
-            # Write header line from keys
-            outFile.write('\t'.join(['chr', 'start',' stop', 'seq'])+'\n')
-            # Read in the input BED file as a dictionary
-            with open(inFile, 'r') as bedFile:
-                bed = csv.DictReader(bedFile, delimiter='\t', fieldnames=['chr','start','stop','seq'])
-                # For each probe, append index sequences accordingly
-                for probe in bed:
-                    # Look up and combine multiple barcodes
-                    barcodeList = sample['barcodes'].split(',')
-                    barcodes = ''.join([indexDict[x] for x in barcodeList])
-                    # Append uniF, barcodes to 5', RC of uniR to 3' of probe sequence
-                    newSeq = ''.join([indexDict[sample['uniF']], barcodes, probe['seq'], reverse_comp(indexDict[sample['uniR']])])
-                    outFile.write('\t'.join([probe['chr'], probe['start'], probe['stop'], newSeq]) + '\n')
+# Define input + output files
+inFile = args.input
+newFile = '_indexed.'.join(inFile.split('.'))
+
+# Define barcode sequences
+uniFseq = indexDict[args.uniF]
+uniRseq = reverse_comp(indexDict[args.uniR])
+barcodeList = args.barcodes
+barcodeList = barcodeList.split(',')
+barcodeSeq = ''.join([indexDict[x] for x in barcodeList])
+
+with open(newFile, 'w') as outFile:
+    # Write header line 
+    outFile.write('\t'.join(['chr', 'start',' stop', 'seq'])+'\n')
+    # Read in the input BED file as a dictionary
+    with open(inFile, 'r') as bedFile:
+        bed = csv.DictReader(bedFile, delimiter='\t', fieldnames=['chr','start','stop','seq'])
+        # For each probe, append index sequences accordingly
+        for probe in bed:
+            # Append uniF, barcodes to 5', RC of uniR to 3' of probe sequence
+            newSeq = ''.join([uniFseq, barcodeSeq, probe['seq'], uniRseq])
+            outFile.write('\t'.join([probe['chr'], probe['start'], probe['stop'], newSeq]) + '\n')

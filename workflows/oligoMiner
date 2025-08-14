@@ -6,9 +6,31 @@ import pandas as pd
 ## Load config and sample sheets 
 configfile: "config/config.yaml"
 
-## Extract probe names from full BED input
-samples = pd.read_csv(config["input"], sep='\t', header=None)
-samples = samples[3]
+## Extract sample region names from full BED input
+sampleInfo = pd.read_csv(config["input"], sep='\t', index_col = "name")
+samples = sampleInfo.index
+
+## Define output file names based on parameters
+finalOutputSuffix = ''
+indexSuffix = ''
+kmerSuffix = ''
+structureSuffix = ''
+
+if config["kmerFilter"] == True:
+    kmerSuffix = '_' + '_'.join(str(x) for x in [config["kmerLength"], config["kmerCount"]])
+if config["structureFilter"] == True:
+    structureSuffix = '_sC'
+if config["addIndex"] == True:
+    indexSuffix = '_indexed'
+finalOutputSuffix = '_probes' + kmerSuffix + structureSuffix + indexSuffix + '.bed'
+
+## Define bowtie2 and cleaning scripts based on run mode:
+if config["alignmentMode"] == "unique":
+    bowtieSettings = "--no-hd -t -k 100 --very-sensitive-local"
+    outputCleanSettings = "-u"
+elif config["alignmentMode"] == "LDA":
+    bowtieSettings = "--no-hd -t -k 2 --local -D 20 -R 3 -N 1 -L 20 -i C,4 --score-min G,1,4"
+    outputCleanSettings = "-T 42"
 
 ## Define actions on success
 onsuccess:
@@ -17,7 +39,7 @@ onsuccess:
 ##### Define rules #####
 rule all:
     input:
-        [expand("output/{group}{ext}", group=key, ext=['_probes.bed', '_probes_18_10.bed', '_probes_18_10_sC.bed']) for key in samples]
+        [expand("output/{group}{ext}", group=key, ext=finalOutputSuffix) for key in samples]
 
 rule makeBED:
     input:
@@ -26,7 +48,7 @@ rule makeBED:
         temp([expand("output/{group}.bed", group=key) for key in samples])
     shell:
         """
-        awk '{{print > ("output/" $4 ".bed") }}' {input.bed}
+        awk 'NR>1 {{print > ("output/" $4 ".bed") }}' {input.bed}
         """
 
 rule getFASTA:
@@ -52,7 +74,9 @@ rule blockParse:
     output:
         fastq = temp("output/{name}.fastq")
     params:
-        out = "output/{name}"
+        out = "output/{name}",
+        minLength = config["probeLengthMin"],
+        maxLength = config["probeLengthMax"]
     log:
         err = "output/logs/{name}_blockParse.err"
     benchmark: 
@@ -61,7 +85,7 @@ rule blockParse:
         "probeMining"
     shell:
         """
-        python scripts/blockParse.py -l 76 -L 81 -f {input.fasta} -o {params.out}
+        python scripts/blockParse.py -l {params.minLength} -L {params.maxLength} -f {input.fasta} -o {params.out}
         """
 
 rule align:
@@ -69,17 +93,18 @@ rule align:
         fastq = "output/{name}.fastq"
     output:
         sam = temp("output/{name}.sam")
+    params:
+        index = config["bowtieIndex"],
+        settings = bowtieSettings
     log:
         err = "output/logs/{name}_align.err"
     benchmark: 
         "output/benchmarks/{name}_align.tsv"
     conda:
         "probeMining"
-    params:
-        index = config["bowtieIndex"]
     shell:
         """
-        bowtie2 -x {params.index} -U {input.fastq} --no-hd -t -k 2 --local -D 20 -R 3 -N 1 -L 20 -i C,4 --score-min G,1,4 -S {output.sam}
+        bowtie2 -x {params.index} -U {input.fastq} {params.settings} -S {output.sam}
         """
 
 rule outputClean:
@@ -87,6 +112,8 @@ rule outputClean:
         sam = "output/{name}.sam"
     output:
         probes = "output/{name}_probes.bed"
+    params:
+        settings = outputCleanSettings
     log:
         err = "output/logs/{name}_outputClean.err"
     benchmark: 
@@ -95,16 +122,18 @@ rule outputClean:
         "probeMining"
     shell:
         """
-        python scripts/outputClean.py -T 42 -f {input.sam}
+        python scripts/outputClean.py {params.settings} -f {input.sam}
         """
 
 rule kmerFilter:
     input:
         probes = "output/{name}_probes.bed"
     output:
-        filtered = "output/{name}_probes_18_10.bed"
+        filtered = "output/{name}_probes" + kmerSuffix + ".bed"
     params:
-        jf = config["jellyfishIndex"]
+        jf = config["jellyfishIndex"],
+        kmerLength = str(config["kmerLength"]),
+        kmerCount = str(config["kmerCount"])
     log:
         err = "output/logs/{name}_kmerFilter.err"
     benchmark: 
@@ -113,14 +142,16 @@ rule kmerFilter:
         "probeMining"
     shell:
         """
-        python scripts/kmerFilter.py -f {input.probes} -m 18 -j {params.jf} -k 10
+        python scripts/kmerFilter.py -f {input.probes} -m {params.kmerLength} -j {params.jf} -k {params.kmerCount}
         """
 
 rule structureCheck:
     input:
-        probes = "output/{name}_probes_18_10.bed"
+        probes = "output/{name}_probes" + kmerSuffix + ".bed"
     output:
-        filtered = "output/{name}_probes_18_10_sC.bed"
+        filtered = "output/{name}_probes" + kmerSuffix + "_sC.bed"
+    params:
+        thresh = config["structureThresh"]
     log:
         err = "output/logs/{name}_structureCheck.err"
     benchmark: 
@@ -129,5 +160,26 @@ rule structureCheck:
         "probeMining"
     shell:
         """
-        python scripts/structureCheck.py -f {input.probes} -t 0.1
+        python scripts/structureCheck.py -f {input.probes} -t {params.thresh}
+        """
+
+rule indexStitch:
+    input:
+        probes = "output/{name}_probes" + kmerSuffix + structureSuffix + ".bed"
+    output:
+        indexed = "output/{name}_probes" + kmerSuffix + structureSuffix + "_indexed.bed"
+    params:
+        indexSeqs = config["indexSeqs"],
+        uniF = lambda wildcards: sampleInfo.loc[wildcards.name, 'uniF'],
+        uniR = lambda wildcards: sampleInfo.loc[wildcards.name, 'uniR'],
+        barcodes = lambda wildcards: sampleInfo.loc[wildcards.name, 'barcodes']
+    log:
+        err = "output/logs/{name}_indexStitch.err"
+    benchmark: 
+        "output/benchmarks/{name}_indexStitch.tsv"
+    conda:
+        "probeMining"
+    shell:
+        """
+        python scripts/addIndex.py -i {input.probes} --uniF {params.uniF} --uniR {params.uniR} --barcodes {params.barcodes} --indexInfo {params.indexSeqs}
         """
