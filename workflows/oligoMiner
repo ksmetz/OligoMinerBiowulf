@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import pandas as pd
+
+## Load config and sample sheets 
+configfile: "config/config.yaml"
+
+## Extract probe names from full BED input
+samples = pd.read_csv(config["input"], sep='\t', header=None)
+samples = samples[3]
+
+## Define actions on success
+onsuccess:
+    print("oligoMiner completed successfully!")
+
+##### Define rules #####
+rule all:
+    input:
+        [expand("output/{group}{ext}", group=key, ext=['_probes.bed', '_probes_18_10.bed', '_probes_18_10_sC.bed']) for key in samples]
+
+rule makeBED:
+    input:
+        bed = config["input"]
+    output:
+        temp([expand("output/{group}.bed", group=key) for key in samples])
+    shell:
+        """
+        awk '{{print > ("output/" $4 ".bed") }}' {input.bed}
+        """
+
+rule getFASTA:
+    input:
+        bed = "output/{name}.bed"
+    output:
+        fasta = temp("output/{name}.fa")
+    params:
+        genome = config['genomeFASTA']
+    log:
+        err = "output/logs/{name}_getFASTA.err"
+    benchmark: 
+        "output/benchmarks/{name}_getFASTA.tsv"
+    shell:
+        """
+        module load bedtools
+        bedtools getfasta -fi {params.genome} -fo {output.fasta} -bed {input.bed}
+        """
+
+rule blockParse:
+    input:
+        fasta = "output/{name}.fa"
+    output:
+        fastq = temp("output/{name}.fastq")
+    params:
+        out = "output/{name}"
+    log:
+        err = "output/logs/{name}_blockParse.err"
+    benchmark: 
+        "output/benchmarks/{name}_blockParse.tsv"
+    conda:
+        "probeMining"
+    shell:
+        """
+        python scripts/blockParse.py -l 76 -L 81 -f {input.fasta} -o {params.out}
+        """
+
+rule align:
+    input:
+        fastq = "output/{name}.fastq"
+    output:
+        sam = temp("output/{name}.sam")
+    log:
+        err = "output/logs/{name}_align.err"
+    benchmark: 
+        "output/benchmarks/{name}_align.tsv"
+    conda:
+        "probeMining"
+    params:
+        index = config["bowtieIndex"]
+    shell:
+        """
+        bowtie2 -x {params.index} -U {input.fastq} --no-hd -t -k 2 --local -D 20 -R 3 -N 1 -L 20 -i C,4 --score-min G,1,4 -S {output.sam}
+        """
+
+rule outputClean:
+    input:
+        sam = "output/{name}.sam"
+    output:
+        probes = "output/{name}_probes.bed"
+    log:
+        err = "output/logs/{name}_outputClean.err"
+    benchmark: 
+        "output/benchmarks/{name}_outputClean.tsv"
+    conda:
+        "probeMining"
+    shell:
+        """
+        python scripts/outputClean.py -T 42 -f {input.sam}
+        """
+
+rule kmerFilter:
+    input:
+        probes = "output/{name}_probes.bed"
+    output:
+        filtered = "output/{name}_probes_18_10.bed"
+    params:
+        jf = config["jellyfishIndex"]
+    log:
+        err = "output/logs/{name}_kmerFilter.err"
+    benchmark: 
+        "output/benchmarks/{name}_kmerFilter.tsv"
+    conda:
+        "probeMining"
+    shell:
+        """
+        python scripts/kmerFilter.py -f {input.probes} -m 18 -j {params.jf} -k 10
+        """
+
+rule structureCheck:
+    input:
+        probes = "output/{name}_probes_18_10.bed"
+    output:
+        filtered = "output/{name}_probes_18_10_sC.bed"
+    log:
+        err = "output/logs/{name}_structureCheck.err"
+    benchmark: 
+        "output/benchmarks/{name}_structureCheck.tsv"
+    conda:
+        "probeMining"
+    shell:
+        """
+        python scripts/structureCheck.py -f {input.probes} -t 0.1
+        """

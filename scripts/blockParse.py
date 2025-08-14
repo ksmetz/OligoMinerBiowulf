@@ -562,6 +562,10 @@ class SequenceCrawler:
                 chrom = headerLine.split('=')[1].split(':')[0]
                 self.start = int(str(headerLine).split(':')[1].split('-')[0])
                 stop = str(headerLine).split('-')[1].split(' ')[0]
+            elif len(headerParse) == 2:
+                chrom = headerLine.split('>')[1].split(':')[0]
+                self.start = int(str(headerLine).split(':')[1].split('-')[0])
+                stop = int(str(headerLine).split('-')[1].split('\n')[0])
 
             else:
                 chrom = 'chrom'

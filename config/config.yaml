@@ -1,0 +1,7 @@
+## Path to input bed
+input: 'input.bed'
+
+## Genome-specific reference parameters
+genomeFASTA: '/fdb/genomebrowser/fasta/hg38/hg38.fa'
+bowtieIndex: '/fdb/igenomes/Homo_sapiens/UCSC/hg38/Sequence/Bowtie2Index/genome' 
+jellyfishIndex: '/data/reedks/data/ref/hg38/hg38_18.jf'
