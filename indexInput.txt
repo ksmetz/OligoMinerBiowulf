@@ -1,0 +1,5 @@
+name	suffix	uniF	uniR	barcodes
+loop1_L	_probes_18_5_sC.bed	ab20_1801	ab20_1952	ab20_2082,ab20_3312
+loop1_R	_probes_18_5_sC.bed	ab20_1801	ab20_1952	ab20_2139
+loop2_L	_probes_18_5_sC.bed	ab20_1801	ab20_1952	ab20_3012
+loop2_R	_probes_18_5_sC.bed	ab20_1801	ab20_1952	ab20_3113

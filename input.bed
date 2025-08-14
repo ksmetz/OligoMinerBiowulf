@@ -1,3 +1,4 @@
+chr	start	stop	name
 chr4	45450000	45460000	loop1_L
 chr4	46270000	46280000	loop1_R
 chr5	152560000	152570000	loop2_L
