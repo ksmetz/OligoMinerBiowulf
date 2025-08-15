@@ -22,7 +22,6 @@ mkdir output
 # mkdir -p output/logs_slurm
 
 ## Execute snakemake workflow
-# snakemake -j 100 --use-conda --max-jobs-per-second 5 --max-status-checks-per-second 5 --rerun-incomplete --restart-times 3 -p -s workflows/oligoMiner --latency-wait 500 --cluster-config "config/cluster.yaml" --cluster "sbatch -J {cluster.name} -p {cluster.partition} -t {cluster.time} -c {cluster.cpusPerTask} --mem-per-cpu={cluster.memPerCpu} -N {cluster.nodes} --output {cluster.output} --error {cluster.error} --parsable"
 snakemake --use-conda --cores 1 -p -s workflows/oligoMiner 
 
 ## Success message

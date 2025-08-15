@@ -24,6 +24,11 @@ if config["addIndex"] == True:
     indexSuffix = '_indexed'
 finalOutputSuffix = '_probes' + kmerSuffix + structureSuffix + indexSuffix + '.bed'
 
+rule_all_input_list = [expand("output/{group}{ext}", group=key, ext=finalOutputSuffix) for key in samples]
+
+if config["addIndex"] == True:
+    rule_all_input_list.append("output/poolProbeOrder.txt")
+
 ## Define bowtie2 and cleaning scripts based on run mode:
 if config["alignmentMode"] == "unique":
     bowtieSettings = "--no-hd -t -k 100 --very-sensitive-local"
@@ -39,7 +44,7 @@ onsuccess:
 ##### Define rules #####
 rule all:
     input:
-        [expand("output/{group}{ext}", group=key, ext=finalOutputSuffix) for key in samples]
+        rule_all_input_list
 
 rule makeBED:
     input:
@@ -182,4 +187,15 @@ rule indexStitch:
     shell:
         """
         python scripts/addIndex.py -i {input.probes} --uniF {params.uniF} --uniR {params.uniR} --barcodes {params.barcodes} --indexInfo {params.indexSeqs}
+        """
+
+rule orderSummary:
+    input:
+        [expand("output/{group}{ext}", group=key, ext=finalOutputSuffix) for key in samples]
+    output:
+        pool = "output/poolProbeOrder.txt"
+    shell:
+        """
+        printf 'probeName\\tseq\\n' > {output.pool}
+        awk 'FNR>1 {{sub("output/", "", FILENAME); split(FILENAME, NAME, "_probes"); OFS="_"; print NAME[1], FNR-1 "\t" $4 >> ("{output.pool}") }}' {input}
         """
