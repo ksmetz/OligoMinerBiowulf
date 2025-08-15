@@ -8,97 +8,138 @@ This repository contains the code for the [OligoMiner](http://dx.doi.org/10.1073
 
 If you are looking to use probe sequences that we have already generated for various genome assemblies (hg19, hg38, mm9, mm10, dm3, dm6, ce6, ce11, danRer10, tair10), you can download those on our [website](http://genetics.med.harvard.edu/oligopaints). If you would like to run the OligoMiner tool yourself, please see below for instructions.
 
+This tool was original created by the [Beliveau lab](https://github.com/beliveau-lab/OligoMiner/tree/master), then edited by Kathleen Reed in the Misteli lab for easy launching using snakemake on the Biowulf HPC. 
 
-## Installing OligoMiner dependencies
+## Biowulf installation steps
 
-1. Make sure you have [conda](https://docs.conda.io/en/latest/miniconda.html) installed. 
+The following steps only need to be done a single time, to make sure the pipeline will run smoothly.
 
-2. Clone this repo, then create and activate the provided [environment](./environment.yml):
+1. Make sure you have [conda](https://docs.conda.io/en/latest/miniconda.html) installed, as per the [Biowulf instructions](https://hpc.nih.gov/docs/diy_installation/conda.html). Generally this requires the following steps:
+	
+		$ sinteractive --mem=20g --gres=lscratch:20
+		$ module load mamba_install
+		$ mamba_install
+	
+	Local install note: If installing locally, use [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install)
 
-```
-$ git clone https://github.com/beliveau-lab/OligoMiner.git
-$ cd OligoMiner
-$ conda env create -f environment.yml
-$ conda activate probeMining
-```
+2. Clone this repo on the cluster in the desired run location (generally in `/data/$USER`):
 
-This will install the following packages and their dependencies:
+		$ git clone https://github.com/ksmetz/OligoMinerBiowulf
+		$ cd OligoMinerBiowulf
 
-* [Python 2.7.15](https://www.python.org/downloads/release/python-2715/)
-* [Biopython](https://biopython.org/)
-* [scikit-learn](https://scikit-learn.org/stable/)
-* [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
-* [JELLYFISH](https://www.cbcb.umd.edu/software/jellyfish/)
-* [NUPACK](http://www.nupack.org/)
+3. In an interactive node, create the conda [environment](./environment.yml) from the `OligoMinerBiowulf` directory:
+	
+		$ sinteractive --mem=20g --gres=lscratch:20
+		$ source /data/$USER/conda/etc/profile.d/conda.sh
+		$ conda env create -f environment.yml
+
+	This will install the following packages and their dependencies into the `probeMining` conda environment, saved locally to your user directory at `/data/$USER/conda/envs`:
+
+	* [Python 2.7.15](https://www.python.org/downloads/release/python-2715/)
+	* [Biopython](https://biopython.org/)
+	* [scikit-learn](https://scikit-learn.org/stable/)
+	* [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
+	* [JELLYFISH](https://www.cbcb.umd.edu/software/jellyfish/)
+
+	**Troubleshooting note:** if you encounter an error ending in the message `Note that strict channel priority may have removed packages required for satisfiability.`, you may need to run the following command before the `conda env create` command:
+	
+		$ conda config --set channel_priority flexible
+
+	**Local install note:** If installing locally, add `CONDA_SUBDIR=osx-64` to beginning of `conda env create` commmand.
+
+	Note that NUPACK is no longer included in the `environment.yml` file as it has been removed from conda - see next step for installation.
+
+4. Download and install NUPACK 3.0.6 manually.
+
+	To download:
+	* [Log in](https://nupack.org/auth/log-in) to [NUPACK](https://nupack.org/). 
+	* If you do not have an account, make one using the following steps:
+		* Click **subscribe** to create an account
+		* Select the "Individual Non-commercial academic subscription" option. It should list a price but also state "temporarily free"
+		* Fill out user info and follow instructions to make an account. Note that you should **NOT** be asked for payment info.
+	* Navigate to the [Download](https://nupack.org/download/overview) page 
+	* Select "Go to Standard License"
+	* Accept the Software License Agreement
+	* Download NUPACK 3.0.6 `.tar` file, and transfer it to your chosen software download location on Biowulf within `/data/$USER`
+
+	To install:
+		$ tar -xvf nupack3.0.6.tar
+		$ cd nupack3.0.6
+		$ make
+
+	Update your PATH and set the `NUPACKHOME` variables in `~/.bash_profile`, i.e.:
+		PATH=$PATH:/data/reedks/tools/nupack3.0.6/bin
+		NUPACKHOME=/data/reedks/tools/nupack3.0.6
+		export PATH
+		export NUPACKHOME
+
+5. Generate a Jellyfish dictionary for k-mer filtering. The can be done from anywhere on the cluster, but you should plan to save the resulting `.jf` file somewhere in `/data/$USER` as a reference file for future use.
+
+	Note that the genome FASTA file (`/fdb/genomebrowser/fasta/hg38/hg38.fa`) will differ based on organism. Adjust k-mer length (`-m 18`) and output file name (`-o hg38_18.jf`) accordingly for your needs.
+
+	This command takes many minutes for large genomes. Consider launching it as a SLURM job instead of in an interactive node. This can also be run locally but may take several hours. The resulting output file is 1.5GB. Katie has a copy of one for hg38 18-mers that she can also share directly upon request to avoid having to remake this.
+
+		sinteractive --mem=20g --gres=lscratch:20
+		source /data/$USER/conda/etc/profile.d/conda.sh
+		conda activate probeMining
+		jellyfish count -s 3300M -m 18 -o hg38_18.jf --out-counter-len 1 -L 2 /fdb/genomebrowser/fasta/hg38/hg38.fa
+
+6. (For local installation only) Download reference files:
+	* Genome FASTA file, i.e. from [UCSC](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/)
+	* Pre-made bowtie2 index, i.e. from the [bowtie2 website](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
+
+## Running pipeline on Biowulf
+
+1. Clone this repo on the cluster in the desired run location (generally in `/data/$USER`):
+	
+		$ git clone https://github.com/ksmetz/OligoMinerBiowulf
+		$ cd OligoMinerBiowulf
+
+2. Edit the config file for your run:
+
+	**Input file**
+	* `input`: in quotations, path to the input `.bed` file
+
+	**Pipeline run options**
+	* `alignmentMode`: either `'unique'` or `'LDA`', depending on which mode you wish to use. Adjusts the bowtie alignment and outputClean.py parameters accordingly
+	* `probeLengthMin`, `probeLengthMax`: probe length parameters for blockParse.py step
+	* `kmerFilter`, `structureFilter`, and `addIndex`: Either `True` or `False` depending on if you want to use this step.
+	* `kmerLength`: If using k-mer filter step, length of k-mer. This must match the setting used to generate the jellyfish index above. 
+	* `kmerCount`, `structureThresh`: parameters for filtering steps
+
+	**Genome-specific reference files**
+	* `genomeFASTA`: path to the FASTA sequence file for your assembly of interest. Many of these are already saved on Biowulf at `/fdb/genomebrowser/fasta`
+	* `bowtieIndex`: path to the bowtie2 index files for your assembly of interest. Many of these are already saved on Biowulf at `/fdb/igenomes/<organism>/<source>/<assembly>/Sequence/Bowtie2Index/genome`
+	* `jellyfishIndex`: path to the `.jf` file (see [installation](#biowulf-installation-steps) step 5)
+
+	**Index sequence information**
+	* `indexSeqs`: A tab-delimited file containing `name` and `seq` columns for indexes to be appeneded to the probe. By default we include `indexSequences.txt`, a list of barcodes from Allistair Boettiger with limited “off targets” for mouse, human, or Drosophila, as used by Leah Rosin's lab.
+
+3. Generate a tab-delimited input `.bed` file.
+
+	The following columns are required:
+	* `chr`, `start`, `stop`: coordinates for regions where probes should be generated
+	* `name`: the name of the region, and the output `probes.bed` file
+
+	The following columns are required if appending indexes (i.e. `addIndex: True` in `config.yaml`):
+	* `uniF`: the name of the primer used as the universal forward primer. Appended to the 5' end of the probe
+	* `uniR`: the name of the primer used as the universal reverse primer. Reverse complement appended to the 3' end of the probe
+	* `barcodes`: the name of the primer(s) used as sample barcodes. Appended to the 5' end of the probe after the universal forward primer.
+	* Note: All primer names should correspond to entries in the `indexSeqs` information file (`indexSequences.txt` by default).
+	
+	See the `input.bed` file as an example.
+
+4. Launch pipeline as a SLURM job with `sbatch ./runOligoMiner.sbatch`
+
+	Pipeline progress will be recorded in `OligoMiner-%j.out`, and output files will be generated in `output`.
+	
+	Note that you can skip straight to this step after step 1 to test the pipeline; it should run in less than 5 minutes.
 
 ### Note about operating systems
 
 OligoMiner is a set of command-line scripts developed on Python 2.7 that can easily be executed from a [Bash Shell](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). If you are using standard Linux or Mac OS X sytsems, we expect these instructions to work for you.
 
 If you are using Windows 10, we recommend enabling [Ubuntu on Windows 10](https://ubuntu.com/tutorials/ubuntu-on-windows), a full Linux distribution, and then running OligoMiner in the Ubuntu terminal.
-
-## Running OligoMiner locally
-
-To make sure all of your dependencies are set up properly, below we will run you through the pipeline using some small example datasets.
-
-### Running scripts on the example files
-
-1. To run the `blockParse.py` script on a .fa file, you can run the following command:
-
-		python blockParse.py -f 3.fa
-
-	This produces a .fastq file (`3.fastq`) containing all identified probe sequences matching your provided criteria. To see additional command line arguments available for this script, you can run the python file with the `-h` argument (i.e. `python blockParse.py -h').
-
-2. NGS alignment. For example, you can use [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml) to align the newly generated set of candidate probes by running:
-
-		bowtie2 -x /path_to_hg38_index/hg38 -U 3.fastq --no-hd -t -k 100 --very-sensitive-local -S 3_u.sam
-
-	or
-
-		bowtie2 -x /path_to_hg38_index/hg38 -U 3.fastq --no-hd -t -k 2 --local -D 20 -R 3 -N 1 -L 20 -i C,4 --score-min G,1,4 -S 3.sam
-
-	... where "path_to_hg38_index" is replaced with the path to the bowtie2 indices for your genome of interest. These commands produce .sam files (`3_u.sam` and `3.sam`) containing sequence alignment information, but require genome builds as described in the previous section. If you are just testing your scripts to make sure they are working properly, we have already provided the output `3_u.sam` and `3.sam` files in the example files directory for you to use to test subsequent scripts.
-
-3. To process the .sam file produced by sequence alignment, use the `outputClean.py` script:
-
-		python outputClean.py -u -f 3_u.sam
-
-	or, optionally (requires sklearn for the LDA model, see above)
-
-		python outputClean.py -T 42 -f 3.sam
-
-	13 of 13 of the candidate probes should pass the first command (and 12 of 13 candidate probes should pass the specificity filtering with the 42C LDA model in the second command). To see additional command line arguments available for this script, you can run the python file with the `-h` argument (i.e. `python outputClean.py -h').
-
-4. [Optional] Now, you can use `kmerFilter.py` to screen your probes against high abundance kmers (requires [Jellyfish](http://www.genome.umd.edu/jellyfish.html) to be installed and in your path, and a Jellyfish dictionary, see instructions above).
-
-		python kmerFilter.py -f 3_probes.bed -m 18 -j sp.jf -k 4
-
-	This command uses a Jellyfish dictionary containing information about high abundance kmers in the genome of interest to screen probes. (We have provided `sp.jf` as an example for you to test the python script, which should pass all 12 probes into the file `3_probes_18_4.bed` . However, you will need to generate your own Jellyfish dictionary for your desired genome in the real case!) To see additional command line arguments available for this script, you can run the python file with the `-h` argument (i.e. `python kmerFilter.py -h').
-
-5. To convert your probe set to their reverse complements, you can use the `probeRC.py` script:
-
-		python probeRC.py -f 3_probes.bed
-
-	This creates a file, `3_probes_RC.bed` containing the reverse complements of all sequences in the original .bed file. To see additional command line arguments available for this script, you can run the python file with the `-h` argument (i.e. `python probeRC.py -h').
-
-6. [Optiona] You can check for secondary structures of probes by calling NUPACK using the `structureCheck.py` script:
-
-		python structureCheck.py -f 3_probes.bed -t 0.4
-
-	This command should pass 6 of 12 example candidate probes. Additional information can be seen in the produced `3_probes_sC.bed` file. To see additional command line arguments available for this script, you can run the python file with the `-h` argument (i.e. `python probeTm.py -h').
-
-7. [Optional] To generate a list of melting temperatures for a given probe set, you can use the`probeTm.py` script:
-
-		python probeTm.py
-
-	or
-
-		python probeTm.py -f 3.txt
-
-	The first command will allow you to enter a sequence interactively to retrieve its computed melting temperature. The second command takes a two column .txt file with the sequence in column 2 (tab delimited) and outputs a new file (`3_tm.txt`) with a 3rd column of Tms.
-
-
-That's all! If you made it through these all without any errors thrown about missing dependencies or modules, you are all set to run OligoMiner on your own computer. Happy FISHing!
 
 ### Notes on running OligoMiner on new genomes
 
@@ -127,6 +168,8 @@ Please cite according to the enclosed [citation.bib](./citation.bib):
 ## Questions
 
 Please reach out to [Brian](mailto:beliveau@uw.edu) with any questions about installing and running the scripts, or [open an issue](../../issues/new) on GitHub.
+
+For questions on running the SnakeMake version of the pipeline on Biowulf, reach out to [Katie](mailto:kathleen.reed2@nih.gov).
 
 ## License
 
