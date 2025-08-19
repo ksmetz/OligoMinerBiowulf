@@ -98,7 +98,7 @@ The following steps only need to be done a single time, to make sure the pipelin
 2. Edit the config file for your run:
 
 	**Input file**
-	* `input`: in quotations, path to the input `.bed` file. See `'exampleInput.bed'` for an example input file. See Step 3 below for file details.
+	* `input`: in quotations, path to the input `.bed` file. See [exampleInput.bed](./exampleInput.bed) for an example input file. See Step 3 below for file details.
 
 	**Pipeline run options**
 	* `alignmentMode`: either `'unique'` or `'LDA`', depending on which mode you wish to use. Adjusts the bowtie alignment and outputClean.py parameters accordingly
@@ -127,7 +127,7 @@ The following steps only need to be done a single time, to make sure the pipelin
 	* `barcodes`: the name of the primer(s) used as sample barcodes. Appended to the 5' end of the probe after the universal forward primer.
 	* Note: All primer names should correspond to entries in the `indexSeqs` information file (`indexSequences.txt` by default).
 	
-	See the `exampleInput.bed` file as an example.
+	See [exampleInput.bed](./exampleInput.bed) file as an example.
 
 4. Launch pipeline as a SLURM job with `sbatch ./runOligoMiner.sbatch`
 
