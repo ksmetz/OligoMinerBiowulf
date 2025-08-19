@@ -14,13 +14,15 @@ This tool was original created by the [Beliveau lab](https://github.com/beliveau
 
 The following steps only need to be done a single time, to make sure the pipeline will run smoothly.
 
-1. Make sure you have [conda](https://docs.conda.io/en/latest/miniconda.html) installed, as per the [Biowulf instructions](https://hpc.nih.gov/docs/diy_installation/conda.html). Generally this requires the following steps:
+1. Make sure you have [conda](https://docs.conda.io/en/latest/miniconda.html) installed, as per the [Biowulf instructions](https://hpc.nih.gov/docs/diy_installation/conda.html). 
+
+	Generally this requires the following steps:
 	
 		$ sinteractive --mem=20g --gres=lscratch:20
 		$ module load mamba_install
 		$ mamba_install
-	
-	Local install note: If installing locally, use [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install)
+		
+	This should generate a directory in `/data/$USER/conda` by default.
 
 2. Clone this repo on the cluster in the desired run location (generally in `/data/$USER`):
 
@@ -45,11 +47,9 @@ The following steps only need to be done a single time, to make sure the pipelin
 	
 		$ conda config --set channel_priority flexible
 
-	**Local install note:** If installing locally, add `CONDA_SUBDIR=osx-64` to beginning of `conda env create` commmand.
-
 	Note that NUPACK is no longer included in the `environment.yml` file as it has been removed from conda - see next step for installation.
 
-4. Download and install NUPACK 3.0.6 manually.
+4. For structure filtering step: Download and install NUPACK 3.0.6 manually.
 
 	To download:
 	* [Log in](https://nupack.org/auth/log-in) to [NUPACK](https://nupack.org/). 
@@ -63,30 +63,30 @@ The following steps only need to be done a single time, to make sure the pipelin
 	* Download NUPACK 3.0.6 `.tar` file, and transfer it to your chosen software download location on Biowulf within `/data/$USER`
 
 	To install:
+	
 		$ tar -xvf nupack3.0.6.tar
 		$ cd nupack3.0.6
 		$ make
-
-	Update your PATH and set the `NUPACKHOME` variables in `~/.bash_profile`, i.e.:
+	
+	Edit your `~/.bash_profile` file to update your PATH and set the `NUPACKHOME` variables, i.e.:
+		
 		PATH=$PATH:/data/reedks/tools/nupack3.0.6/bin
 		NUPACKHOME=/data/reedks/tools/nupack3.0.6
 		export PATH
 		export NUPACKHOME
 
-5. Generate a Jellyfish dictionary for k-mer filtering. The can be done from anywhere on the cluster, but you should plan to save the resulting `.jf` file somewhere in `/data/$USER` as a reference file for future use.
+5. For k-mer filtering step: Generate a Jellyfish dictionary for k-mer filtering. The can be done from anywhere on the cluster, but you should plan to save the resulting `.jf` file somewhere in `/data/$USER` as a reference file for future use.
 
 	Note that the genome FASTA file (`/fdb/genomebrowser/fasta/hg38/hg38.fa`) will differ based on organism. Adjust k-mer length (`-m 18`) and output file name (`-o hg38_18.jf`) accordingly for your needs.
 
-	This command takes many minutes for large genomes. Consider launching it as a SLURM job instead of in an interactive node. This can also be run locally but may take several hours. The resulting output file is 1.5GB. Katie has a copy of one for hg38 18-mers that she can also share directly upon request to avoid having to remake this.
+	This command takes many minutes for large genomes. Consider launching it as a SLURM job instead of in an interactive node. This can also be run locally but may take several hours. The resulting output file is ~1.5GB for hg38 18-mers. 
+	
+	Katie has a copy of one for hg38 18-mers that she can also share directly upon request to avoid having to remake this.
 
-		sinteractive --mem=20g --gres=lscratch:20
-		source /data/$USER/conda/etc/profile.d/conda.sh
-		conda activate probeMining
-		jellyfish count -s 3300M -m 18 -o hg38_18.jf --out-counter-len 1 -L 2 /fdb/genomebrowser/fasta/hg38/hg38.fa
-
-6. (For local installation only) Download reference files:
-	* Genome FASTA file, i.e. from [UCSC](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/)
-	* Pre-made bowtie2 index, i.e. from the [bowtie2 website](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
+		$ sinteractive --mem=20g --gres=lscratch:20
+		$ source /data/$USER/conda/etc/profile.d/conda.sh
+		$ conda activate probeMining
+		$ jellyfish count -s 3300M -m 18 -o hg38_18.jf --out-counter-len 1 -L 2 /fdb/genomebrowser/fasta/hg38/hg38.fa
 
 ## Running pipeline on Biowulf
 
@@ -98,7 +98,7 @@ The following steps only need to be done a single time, to make sure the pipelin
 2. Edit the config file for your run:
 
 	**Input file**
-	* `input`: in quotations, path to the input `.bed` file
+	* `input`: in quotations, path to the input `.bed` file. See `'input.bed'` for an example input file. See Step 3 below for file details.
 
 	**Pipeline run options**
 	* `alignmentMode`: either `'unique'` or `'LDA`', depending on which mode you wish to use. Adjusts the bowtie alignment and outputClean.py parameters accordingly
@@ -113,7 +113,7 @@ The following steps only need to be done a single time, to make sure the pipelin
 	* `jellyfishIndex`: path to the `.jf` file (see [installation](#biowulf-installation-steps) step 5)
 
 	**Index sequence information**
-	* `indexSeqs`: A tab-delimited file containing `name` and `seq` columns for indexes to be appeneded to the probe. By default we include `indexSequences.txt`, a list of barcodes from Allistair Boettiger with limited “off targets” for mouse, human, or Drosophila, as used by Leah Rosin's lab.
+	* `indexSeqs`: A tab-delimited file containing `name` and `seq` columns for indexes to be appeneded to the probe when `addIndex` is set to `True`. By default we include `indexSequences.txt`, a list of barcodes from Allistair Boettiger with limited “off targets” for mouse, human, or Drosophila, as used by Leah Rosin's lab.
 
 3. Generate a tab-delimited input `.bed` file.
 
