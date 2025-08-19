@@ -1,5 +1,5 @@
-## Path to input bed, index description file
-input: 'input.bed'
+## Path to input bed file
+input: 'exampleInput.bed'
 
 ## Pipeline run options
 alignmentMode: "unique" # "unique" or "LDA"
